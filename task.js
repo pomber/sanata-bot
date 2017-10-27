@@ -55,6 +55,7 @@ function getNewMentions(twitter, lastId) {
   const searchParams = {
     q: buildQuery(),
     count: 100,
+    tweet_mode: "extended",
     since_id: lastId,
     include_entities: false
   };
@@ -65,6 +66,8 @@ function getNewMentions(twitter, lastId) {
       const statuses = result.statuses;
       console.log(result.search_metadata);
       console.log("result count: ", statuses.length);
+      // console.log("result: ", statuses);
+      // console.log("result: ", statuses.map(x => x.full_text));
       resolve({ lastId, statuses });
     });
   });
@@ -93,7 +96,7 @@ function getBotCalls(mentions) {
     }
 
     const botCalls = mentions.filter(isCallingMe).map(m => ({
-      tweet: m.text,
+      tweet: m.full_text,
       id: m.id_str,
       username: getUserFromMention(m)
     }));
@@ -103,13 +106,13 @@ function getBotCalls(mentions) {
 }
 
 function isCallingMe(mention) {
-  const normalizedText = normalize(mention.text);
+  const normalizedText = normalize(mention.full_text);
   const matches = queries.some(q => q.regex.test(normalizedText));
   return matches && mention.user.screen_name != BOT_NAME && !mention.retweeted;
 }
 
 function getUserFromMention(mention) {
-  const normalizedText = normalize(mention.text);
+  const normalizedText = normalize(mention.full_text);
   const query = queries.find(q => q.regex.test(normalizedText));
   const username = query.regex.exec(normalizedText)[1];
   return username;
@@ -118,8 +121,8 @@ function getUserFromMention(mention) {
 function normalize(text) {
   return text
     .toLowerCase()
-    .replace("í", "i")
-    .replace("é", "e");
+    .replace(/í/g, "i")
+    .replace(/é/g, "e");
 }
 
 function replyToCalls(twitter, botCalls) {
@@ -149,6 +152,7 @@ function getPage(twitter, options) {
   const opts = {
     count: 1000,
     trim_user: false,
+    tweet_mode: "extended",
     exclude_replies: false,
     include_rts: false,
     since_id: 1
@@ -217,7 +221,7 @@ function sanitizeReply(reply) {
 
 function getGoodReply(twitter, username) {
   return getAll(twitter, username).then(tweets => {
-    const texts = tweets.map(t => t.text);
+    const texts = tweets.map(t => t.full_text);
     const model = trainModel(texts);
     for (let i = 0; i < 100; i++) {
       const reply = getReply(model);
