@@ -1896,6 +1896,14 @@ https-proxy-agent@1, https-proxy-agent@^1.0.0:
     debug "2"
     extend "3"
 
+hx-markov-chain@^1.2.0:
+  version "1.2.0"
+  resolved "https://registry.yarnpkg.com/hx-markov-chain/-/hx-markov-chain-1.2.0.tgz#8b3585ee8d6f43012bf2a4c00e8dd3e73c7ad3e3"
+
+hx-tokenizer@^1.0.0:
+  version "1.0.0"
+  resolved "https://registry.yarnpkg.com/hx-tokenizer/-/hx-tokenizer-1.0.0.tgz#88c86bbdc2708ae4a0f8549595e3044e9cfe1e53"
+
 iconv-lite@0.4.19, iconv-lite@^0.4.5:
   version "0.4.19"
   resolved "https://registry.yarnpkg.com/iconv-lite/-/iconv-lite-0.4.19.tgz#f7468f60135f5e5dad3399c0a81be9a1603a082b"

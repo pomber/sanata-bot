@@ -1,9 +1,11 @@
 const Twit = require("twit");
+const markov = require("hx-markov-chain");
+const tokenizer = require("hx-tokenizer");
 const BOT_NAME = "sanatabot";
 
 const queries = [
-  { regex: /que diria (\w+)/, keyword: "diria" }, //TODO
-  { regex: /what would (\w+) say/, keyword: "say" }, //TODO
+  { regex: /que diria (\w+)/, keyword: "diria" },
+  { regex: /what would (\w+) say/, keyword: "say" },
   { regex: /que diria @(\w+)/, keyword: "diria" },
   { regex: /what would @(\w+) say/, keyword: "say" }
 ];
@@ -28,6 +30,7 @@ module.exports = (ctx, cb) => {
 
       mentionsPromise
         .then(result => {
+          if (!result.lastId) return;
           data.lastId = result.lastId;
           return setStorageData(ctx, data);
         })
@@ -49,9 +52,8 @@ module.exports = (ctx, cb) => {
 function getNewMentions(twitter, lastId) {
   const searchParams = {
     q: buildQuery(),
-    count: 1, //TODO
-    // TODO
-    // since_id: lastId,
+    count: 100,
+    since_id: lastId,
     include_entities: false
   };
   return new Promise((resolve, reject) => {
@@ -101,7 +103,7 @@ function getBotCalls(mentions) {
 function isCallingMe(mention) {
   const normalizedText = normalize(mention.text);
   const matches = queries.some(q => q.regex.test(normalizedText));
-  return matches; //TODO && mention.user.screen_name != BOT_NAME && !mention.retweeted
+  return matches && mention.user.screen_name != BOT_NAME && !mention.retweeted;
 }
 
 function getUserFromMention(mention) {
@@ -112,7 +114,10 @@ function getUserFromMention(mention) {
 }
 
 function normalize(text) {
-  return text.toLowerCase().replace("í", "i");
+  return text
+    .toLowerCase()
+    .replace("í", "i")
+    .replace("é", "e");
 }
 
 function replyToCalls(twitter, botCalls) {
@@ -123,11 +128,101 @@ function replyToCall(twitter, botCall) {
   console.log(botCall);
   const callId = botCall.id;
   const username = botCall.username;
-  const reply = "test " + username + " foo";
+  return getGoodReply(twitter, username).then(reply => {
+    console.log("reply:", reply);
+    return twitter.post("statuses/update", {
+      status: reply,
+      in_reply_to_status_id: callId,
+      auto_populate_reply_metadata: true
+    });
+  });
+}
 
-  return twitter.post("statuses/update", {
-    status: reply,
-    in_reply_to_status_id: callId,
-    auto_populate_reply_metadata: true
+// *** Generate reply *** //
+
+// Maximum number of pages to fetch
+const MAX_PAGES = 25;
+
+function getPage(twitter, options) {
+  const opts = {
+    count: 1000,
+    trim_user: false,
+    exclude_replies: false,
+    include_rts: false,
+    since_id: 1
+  };
+  Object.assign(opts, options);
+
+  return twitter.get("statuses/user_timeline", opts).then(response => {
+    if (response.data.errors) {
+      return;
+    }
+    return response.data.filter(t => t.id_str !== opts.max_id);
+  });
+}
+
+function getPages(twitter, lastPage, pages, opts) {
+  if (lastPage) {
+    opts.max_id = lastPage[lastPage.length - 1].id_str;
+  }
+  return getPage(twitter, opts).then(page => {
+    if (!page) return pages;
+    pages.push(page);
+    if (!page.length || !pages.length > MAX_PAGES) {
+      return getPages(twitter, page, pages, opts);
+    }
+    return pages;
+  });
+}
+
+function getAll(twitter, username) {
+  const opts = {
+    screen_name: username,
+    since_id: "1"
+  };
+
+  return getPages(twitter, null, [], opts).then(pages => {
+    const tweets = pages.reduce((a, b) => a.concat(b), []);
+    return tweets;
+  });
+}
+
+function trainModel(tweets) {
+  const model = markov.create();
+  tweets.forEach(tweet => {
+    const tokens = tokenizer.tokenize(tweet);
+    markov.update(model, tokens);
+  });
+  return model;
+}
+
+function getReply(model) {
+  const chain = markov.run(model);
+  let reply = tokenizer.join(chain);
+  return reply;
+}
+
+function sanitizeReply(reply) {
+  // remove reply_metadata
+  let newReply = reply.replace(/^(@\w+ )*/, "");
+  // escape mentions
+  newReply = newReply.replace(/@/g, "@ ");
+  if (newReply.length > 140) {
+    replt = newReply.slice(0, 137) + "...";
+  }
+  return newReply;
+}
+
+function getGoodReply(twitter, username) {
+  return getAll(twitter, username).then(tweets => {
+    const texts = tweets.map(t => t.text);
+    const model = trainModel(texts);
+    for (let i = 0; i < 100; i++) {
+      const reply = getReply(model);
+      if (!texts.some(t => t == reply)) {
+        return sanitizeReply(reply);
+      }
+    }
+    return sanitizeReply(reply);
   });
 }
