@@ -6,7 +6,7 @@
   "author": "pomber <pombopombopombo@gmail.com>",
   "license": "MIT",
   "scripts": {
-    "start": "wt serve task.js --secrets-file .secrets",
+    "start": "wt serve task.js --secrets-file .secrets --storage-file .storage",
     "deploy": "wt create task.js --secrets-file .secrets"
   },
   "devDependencies": {
