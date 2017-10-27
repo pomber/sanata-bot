@@ -1,6 +1,19 @@
 const Twit = require("twit");
 const BOT_NAME = "sanatabot";
 
+const queries = [
+  { regex: /que diria (\w+)/, keyword: "diria" }, //TODO
+  { regex: /what would (\w+) say/, keyword: "say" }, //TODO
+  { regex: /que diria @(\w+)/, keyword: "diria" },
+  { regex: /what would @(\w+) say/, keyword: "say" }
+];
+
+function buildQuery() {
+  const keywords = queries.map(q => q.keyword);
+  const kquery = keywords.join(" OR ");
+  return kquery + " @" + BOT_NAME;
+}
+
 module.exports = (ctx, cb) => {
   const twitter = new Twit({
     consumer_key: ctx.secrets.consumer_key,
@@ -31,18 +44,19 @@ module.exports = (ctx, cb) => {
 
 function getNewMentions(twitter, lastId) {
   const searchParams = {
-    q: "@jack",
-    since_id: lastId,
+    q: buildQuery(),
     count: 1000,
+    // TODO
+    // since_id: lastId,
     include_entities: false
   };
   return new Promise((resolve, reject) => {
     twitter.get("search/tweets", searchParams, (error, result, response) => {
       if (error) return reject(error);
-      console.log(result.search_metadata);
       const lastId = result.search_metadata.max_id_str;
       const statuses = result.statuses;
-      console.log(statuses.length);
+      console.log(result.search_metadata);
+      console.log("count: ", statuses.length);
       resolve({ lastId, statuses });
     });
   });
@@ -69,13 +83,29 @@ function processMentions(mentions) {
     if (!mentions || !mentions.length) {
       resolve();
     }
-    const texts = mentions.filter(isCallingMe).map(m => m.text);
-    console.log(texts);
+    console.log(mentions.map(m => m.text));
+    const botCalls = mentions
+      .filter(isCallingMe)
+      .map(m => ({ tweet: m.text, username: getUserFromMention(m) }));
+    console.log(botCalls);
     // console.log(mentions[0]);
     resolve();
   });
 }
 
 function isCallingMe(mention) {
-  return true; //&& mention.user.screen_name != BOT_NAME && !mention.retweeted
+  const normalizedText = normalize(mention.text);
+  const matches = queries.some(q => q.regex.test(normalizedText));
+  return matches; //TODO && mention.user.screen_name != BOT_NAME && !mention.retweeted
+}
+
+function getUserFromMention(mention) {
+  const normalizedText = normalize(mention.text);
+  const query = queries.find(q => q.regex.test(normalizedText));
+  const username = query.regex.exec(normalizedText)[1];
+  return username;
+}
+
+function normalize(text) {
+  return text.toLowerCase().replace("í", "i");
 }
