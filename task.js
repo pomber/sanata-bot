@@ -33,10 +33,14 @@ module.exports = (ctx, cb) => {
         })
         .catch(error => console.log(error));
 
-      return mentionsPromise.then(result => {
-        const statuses = result.statuses;
-        return processMentions(result.statuses);
-      });
+      return mentionsPromise
+        .then(result => {
+          const statuses = result.statuses;
+          return getBotCalls(result.statuses);
+        })
+        .then(botCalls => {
+          return replyToCalls(twitter, botCalls);
+        });
     })
     .then(() => cb(null, "OK"))
     .catch(error => cb(error));
@@ -45,7 +49,7 @@ module.exports = (ctx, cb) => {
 function getNewMentions(twitter, lastId) {
   const searchParams = {
     q: buildQuery(),
-    count: 1000,
+    count: 1, //TODO
     // TODO
     // since_id: lastId,
     include_entities: false
@@ -56,7 +60,7 @@ function getNewMentions(twitter, lastId) {
       const lastId = result.search_metadata.max_id_str;
       const statuses = result.statuses;
       console.log(result.search_metadata);
-      console.log("count: ", statuses.length);
+      console.log("result count: ", statuses.length);
       resolve({ lastId, statuses });
     });
   });
@@ -78,18 +82,19 @@ function setStorageData(ctx, data) {
   });
 }
 
-function processMentions(mentions) {
+function getBotCalls(mentions) {
   return new Promise((resolve, reject) => {
     if (!mentions || !mentions.length) {
-      resolve();
+      resolve([]);
     }
-    console.log(mentions.map(m => m.text));
-    const botCalls = mentions
-      .filter(isCallingMe)
-      .map(m => ({ tweet: m.text, username: getUserFromMention(m) }));
-    console.log(botCalls);
-    // console.log(mentions[0]);
-    resolve();
+
+    const botCalls = mentions.filter(isCallingMe).map(m => ({
+      tweet: m.text,
+      id: m.id_str,
+      username: getUserFromMention(m)
+    }));
+
+    resolve(botCalls);
   });
 }
 
@@ -108,4 +113,21 @@ function getUserFromMention(mention) {
 
 function normalize(text) {
   return text.toLowerCase().replace("í", "i");
+}
+
+function replyToCalls(twitter, botCalls) {
+  return Promise.all(botCalls.map(call => replyToCall(twitter, call)));
+}
+
+function replyToCall(twitter, botCall) {
+  console.log(botCall);
+  const callId = botCall.id;
+  const username = botCall.username;
+  const reply = "test " + username + " foo";
+
+  return twitter.post("statuses/update", {
+    status: reply,
+    in_reply_to_status_id: callId,
+    auto_populate_reply_metadata: true
+  });
 }
